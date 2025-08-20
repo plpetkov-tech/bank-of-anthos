@@ -5,17 +5,23 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Services to build (comma-separated, or "all")'
+        required: false
+        default: 'all'
 
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
-  build-matrix:
+  build-python-services:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [frontend, userservice, contacts, ledgerwriter, balancereader, transactionhistory, loadgenerator]
+        service: [frontend, userservice, contacts, loadgenerator]
     
     permissions:
       contents: read
@@ -59,15 +65,6 @@ jobs:
           contacts)
             echo "path=src/accounts/contacts" >> $GITHUB_OUTPUT
             ;;
-          ledgerwriter)
-            echo "path=src/ledger/ledgerwriter" >> $GITHUB_OUTPUT
-            ;;
-          balancereader)
-            echo "path=src/ledger/balancereader" >> $GITHUB_OUTPUT
-            ;;
-          transactionhistory)
-            echo "path=src/ledger/transactionhistory" >> $GITHUB_OUTPUT
-            ;;
           loadgenerator)
             echo "path=src/loadgenerator" >> $GITHUB_OUTPUT
             ;;
@@ -78,8 +75,89 @@ jobs:
       with:
         context: ${{ steps.service-path.outputs.path }}
         platforms: linux/amd64,linux/arm64
-        push: true
+        push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+  build-java-services:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [ledgerwriter, balancereader, transactionhistory]
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Determine service path
+      id: service-path
+      run: |
+        case "${{ matrix.service }}" in
+          ledgerwriter)
+            echo "path=src/ledger/ledgerwriter" >> $GITHUB_OUTPUT
+            ;;
+          balancereader)
+            echo "path=src/ledger/balancereader" >> $GITHUB_OUTPUT
+            ;;
+          transactionhistory)
+            echo "path=src/ledger/transactionhistory" >> $GITHUB_OUTPUT
+            ;;
+        esac
+    
+    - name: Build and push with Jib
+      run: |
+        cd ${{ steps.service-path.outputs.path }}
+        # Extract tag from metadata
+        TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+        
+        if [ "${{ github.event_name }}" != "pull_request" ]; then
+          echo "Building and pushing to registry..."
+          mvn compile jib:build \
+            -Dimage=${TAG} \
+            -Djib.to.auth.username=${{ github.actor }} \
+            -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}
+          
+          # Build additional tags
+          echo "${{ steps.meta.outputs.tags }}" | while read tag; do
+            if [ "$tag" != "$TAG" ] && [ -n "$tag" ]; then
+              mvn jib:build \
+                -Dimage=${tag} \
+                -Djib.to.auth.username=${{ github.actor }} \
+                -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}
+            fi
+          done
+        else
+          echo "PR build - only testing compilation..."
+          mvn compile jib:dockerBuild -Dimage=${TAG}
+        fi
