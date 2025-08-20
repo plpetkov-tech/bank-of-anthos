@@ -1,0 +1,42 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: bank-of-anthos-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "bank.yourdomain.com"  # Replace with your domain
+  # - port:  # Uncomment for HTTPS
+  #     number: 443
+  #     name: https
+  #     protocol: HTTPS
+  #   tls:
+  #     mode: SIMPLE
+  #     credentialName: bank-tls  # Secret created by cert-manager
+  #   hosts:
+  #   - "bank.yourdomain.com"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: bank-of-anthos-vs
+spec:
+  hosts:
+  - "bank.yourdomain.com"  # Replace with your domain
+  gateways:
+  - bank-of-anthos-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: frontend
+        port:
+          number: 80

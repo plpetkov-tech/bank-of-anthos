@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+    application: bank-of-anthos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        application: bank-of-anthos
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: front
+        image: frontend:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: VERSION
+          value: "v0.6.7"
+        - name: PORT
+          value: "8080"
+        - name: SCHEME
+          value: "http"
+        # Reference configmap values
+        - name: BANK_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: bank-of-anthos-config
+              key: BANK_NAME
+        - name: ENV_PLATFORM
+          valueFrom:
+            configMapKeyRef:
+              name: bank-of-anthos-config
+              key: ENV_PLATFORM
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: bank-of-anthos-config
+              key: LOG_LEVEL
+        # Database connection
+        - name: ACCOUNTS_DB_URI
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: accounts_db_uri
+        - name: LEDGER_DB_URI
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: ledger_db_uri
+        # Authentication (optional)
+        - name: AUTH_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: bank-of-anthos-config
+              key: AUTH_ENABLED
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: jwtRS256.key
+              optional: true
+        # Observability (optional)
+        - name: METRICS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: bank-of-anthos-config
+              key: METRICS_ENABLED
+        - name: TRACING_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: bank-of-anthos-config
+              key: TRACING_ENABLED
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - all
+          privileged: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /tmp/.ssh
+          name: publickey
+          readOnly: true
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 5
+      volumes:
+      - emptyDir: {}
+        name: tmp
+      - name: publickey
+        secret:
+          items:
+          - key: jwtRS256.key.pub
+            path: publickey
+          secretName: jwt-secret
+          optional: true

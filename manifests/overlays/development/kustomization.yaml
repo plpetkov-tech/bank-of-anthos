@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bank-of-anthos-dev
+
+resources:
+- ../../base
+
+patchesStrategicMerge:
+- deployment-patches.yaml
+
+configMapGenerator:
+- name: bank-of-anthos-config
+  behavior: merge
+  literals:
+  - LOG_LEVEL=DEBUG
+  - METRICS_ENABLED=true
+  - AUTH_ENABLED=false
+
+replicas:
+- name: frontend
+  count: 1
+
+images:
+- name: frontend
+  newTag: dev-latest

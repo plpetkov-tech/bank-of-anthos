@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bank-of-anthos-prod
+
+resources:
+- ../../overlays/production
+
+configMapGenerator:
+- name: bank-of-anthos-config
+  behavior: merge
+  literals:
+  - BANK_NAME=Production Bank of Anthos
+  - ENV_PLATFORM=kubernetes
+  - LOG_LEVEL=WARN
+
+replicas:
+- name: frontend
+  count: 5
+
+images:
+- name: frontend
+  newTag: stable

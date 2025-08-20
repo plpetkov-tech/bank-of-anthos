@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bank-of-anthos
+  labels:
+    app: bank-of-anthos
+spec:
+  selector:
+    matchLabels:
+      app: bank-of-anthos
+      tier: app
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-metrics
+  labels:
+    app: frontend
+    application: bank-of-anthos
+    tier: app
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: frontend
+    application: bank-of-anthos
+  type: ClusterIP

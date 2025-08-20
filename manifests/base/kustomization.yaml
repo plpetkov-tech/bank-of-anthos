@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- configmaps/app-config.yaml
+- secrets/database-credentials.yaml
+- deployments/frontend.yaml
+- services/frontend.yaml
+- databases/accounts-db.yaml
+- databases/ledger-db.yaml
+
+commonLabels:
+  application: bank-of-anthos
+
+namePrefix: ""
+nameSuffix: ""

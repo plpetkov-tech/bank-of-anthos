@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bank-of-anthos-config
+  labels:
+    app: bank-of-anthos
+data:
+  # Database Configuration
+  POSTGRES_DB: "bankofanthos"
+  POSTGRES_USER: "bankuser"
+  DB_HOST: "postgresql.database.svc.cluster.local"
+  DB_PORT: "5432"
+  
+  # Authentication Configuration
+  AUTH_ENABLED: "false"
+  AUTH_TYPE: "none"  # none, basic, oidc
+  JWT_SECRET: "your-jwt-secret-here"
+  JWT_ALGORITHM: "HS256"
+  
+  # Observability Configuration
+  METRICS_ENABLED: "false"
+  METRICS_ENDPOINTS: "health,info"
+  TRACING_ENABLED: "false"
+  LOG_LEVEL: "INFO"
+  LOGGING_PATTERN: "%d{HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  
+  # Application Configuration
+  BANK_NAME: "Bank of Anthos"
+  ENV_PLATFORM: "kubernetes"
+  
+  # External Service URLs (when external services are used)
+  # OIDC_ISSUER: "https://keycloak.auth.svc.cluster.local/auth/realms/bank"
+  # OIDC_CLIENT_ID: "bank-of-anthos"
+  # JAEGER_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:14268"
+  # PROMETHEUS_GATEWAY: "http://prometheus-pushgateway.observability.svc.cluster.local:9091"

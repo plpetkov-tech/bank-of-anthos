@@ -35,11 +35,10 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.propagate import set_global_textmap
-from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-from opentelemetry.propagators.cloud_trace_propagator import CloudTraceFormatPropagator
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.jinja2 import Jinja2Instrumentor
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 # Local imports
 from api_call import ApiCall, ApiRequest
@@ -681,36 +680,9 @@ def create_app():
     app.config['SCHEME'] = os.environ.get('SCHEME', 'http')
 
     # where am I?
-    metadata_server = os.getenv('METADATA_SERVER', 'metadata.google.internal')
-    metadata_url = f'http://{metadata_server}/computeMetadata/v1/'
-    metadata_headers = {'Metadata-Flavor': 'Google'}
-
-    # get GKE cluster name
-    cluster_name = os.getenv('CLUSTER_NAME', 'unknown')
-    try:
-        req = requests.get(metadata_url + 'instance/attributes/cluster-name',
-                           headers=metadata_headers,
-                           timeout=app.config['BACKEND_TIMEOUT'])
-        if req.ok:
-            cluster_name = str(req.text)
-    except (RequestException, HTTPError) as err:
-        app.logger.warning(
-            "Unable to retrieve cluster name from metadata server %s.", metadata_server)
-
-    # get GKE pod name
-    pod_name = "unknown"
-    pod_name = socket.gethostname()
-
-    # get GKE node zone
-    pod_zone = os.getenv('POD_ZONE', 'unknown')
-    try:
-        req = requests.get(metadata_url + 'instance/zone',
-                           headers=metadata_headers,
-                           timeout=app.config['BACKEND_TIMEOUT'])
-        if req.ok:
-            pod_zone = str(req.text.split("/")[3])
-    except (RequestException, HTTPError) as err:
-        app.logger.warning("Unable to retrieve zone from metadata server %s.", metadata_server)
+    cluster_name = os.getenv('CLUSTER_NAME', 'local-cluster')
+    pod_name = os.getenv('HOSTNAME', socket.gethostname())
+    pod_zone = os.getenv('POD_ZONE', 'local-zone')
 
     # register formater functions
     app.jinja_env.globals.update(format_currency=format_currency)
@@ -722,15 +694,23 @@ def create_app():
     app.logger.setLevel(logging.getLogger('gunicorn.error').level)
     app.logger.info('Starting frontend service.')
 
-    # Set up tracing and export spans to Cloud Trace.
-    if os.environ['ENABLE_TRACING'] == "true":
+    # Set up observability
+    metrics_enabled = os.getenv('METRICS_ENABLED', 'false').lower() == 'true'
+    if metrics_enabled:
+        app.logger.info("✅ Metrics enabled.")
+        # Prometheus metrics
+        REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
+        REQUEST_DURATION = Histogram('http_request_duration_seconds', 'HTTP request duration')
+        
+        @app.route('/metrics', methods=['GET'])
+        def metrics():
+            return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+            
+    tracing_enabled = os.getenv('TRACING_ENABLED', 'false').lower() == 'true' 
+    if tracing_enabled:
         app.logger.info("✅ Tracing enabled.")
         trace.set_tracer_provider(TracerProvider())
-        cloud_trace_exporter = CloudTraceSpanExporter()
-        trace.get_tracer_provider().add_span_processor(
-            BatchSpanProcessor(cloud_trace_exporter)
-        )
-        set_global_textmap(CloudTraceFormatPropagator())
+        # Note: Add your tracing exporter here (Jaeger, OTLP, etc.)
         # Add tracing auto-instrumentation for Flask, jinja and requests
         FlaskInstrumentor().instrument_app(app)
         RequestsInstrumentor().instrument()

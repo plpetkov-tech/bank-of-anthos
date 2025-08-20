@@ -1,0 +1,60 @@
+apiVersion: skaffold/v4beta7
+kind: Config
+metadata:
+  name: bank-of-anthos
+
+build:
+  artifacts:
+  - image: frontend
+    context: src/frontend
+    docker:
+      dockerfile: Dockerfile
+  - image: userservice
+    context: src/accounts/userservice
+    docker:
+      dockerfile: Dockerfile
+  - image: contacts
+    context: src/accounts/contacts
+    docker:
+      dockerfile: Dockerfile
+  - image: ledgerwriter
+    context: src/ledger/ledgerwriter
+    jib:
+      project: src/ledger/ledgerwriter
+  - image: balancereader
+    context: src/ledger/balancereader
+    jib:
+      project: src/ledger/balancereader
+  - image: transactionhistory
+    context: src/ledger/transactionhistory
+    jib:
+      project: src/ledger/transactionhistory
+  - image: loadgenerator
+    context: src/loadgenerator
+    docker:
+      dockerfile: Dockerfile
+  tagPolicy:
+    envTemplate:
+      template: "{{.IMAGE_NAME}}:{{.USER}}-{{.DATE}}"
+
+deploy:
+  kustomize:
+    paths:
+    - manifests/overlays/development
+
+profiles:
+- name: production
+  deploy:
+    kustomize:
+      paths:
+      - manifests/overlays/production
+- name: minimal
+  deploy:
+    kustomize:
+      paths:
+      - manifests/examples/minimal
+- name: homelab
+  deploy:
+    kustomize:
+      paths:
+      - manifests/examples/homelab

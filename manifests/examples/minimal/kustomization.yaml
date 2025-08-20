@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bank-of-anthos-minimal
+
+resources:
+- ../../base
+
+# In-memory configuration - removes database dependencies
+configMapGenerator:
+- name: bank-of-anthos-config
+  behavior: merge
+  literals:
+  - DB_TYPE=memory
+  - AUTH_ENABLED=false
+  - METRICS_ENABLED=false
+  - LOG_LEVEL=INFO
+
+# Remove database components for minimal setup
+patchesJson6902:
+- target:
+    kind: Kustomization
+    name: base
+  patch: |-
+    - op: remove
+      path: /resources/4  # Remove accounts-db.yaml
+    - op: remove  
+      path: /resources/4  # Remove ledger-db.yaml (index shifts after first removal)
+
+replicas:
+- name: frontend
+  count: 1
